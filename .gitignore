@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Environments
+.venv/
+.env
+
+# Local secrets / config
+
+# Cached SEC responses (provenance anchor — regenerated on demand, never committed)
+data/cache/
+# Fetched filing corpus (regenerable from the SEC)
+data/store/
+# Retrieval index (regenerable from chunks) and downloaded embedding models
+data/index/
+data/models/
