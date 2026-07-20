@@ -357,13 +357,31 @@ Honest list, in rough priority order:
 frameworks, rerankers (pending evidence), Docker, streaming responses, query-routing
 classifiers.
 
-## 9. Evaluation harness (next; to be expanded here)
+## 9. Evaluation harness (built — separate repository)
 
-The harness will be a separate, language-agnostic project driving this system
-black-box over HTTP. The API surface it needs already exists: `/ask` (structured
-answers, refusal flags, provenance), `/search` (retrieval-only probing), and
-`/chunks/{id}` (independent quote verification). Planned probe axes: answer
-correctness against hand-labeled expectations, citation integrity (re-verify every
-quote via `/chunks`), refusal calibration (off-corpus, near-corpus, unanswerable-
-in-corpus), and robustness (paraphrase stability, filter behavior). This section
-will be fleshed out with the harness design, its metrics, and results once built.
+The harness lives in its own repository (`sec-filings-eval-harness`) and drives this
+system **black-box over HTTP, importing none of its code** (machine-checked: zero
+`filings_analyst` references). Key design points:
+
+- **Cases are data** — plain YAML files, one per case, dispatched by `type`; the
+  Python runner is a reference implementation, and a runner in any language could
+  execute the same case files against the same contract.
+- **Independent wire schema** — the harness re-declares the expected response shapes
+  rather than importing this repo's models, so API drift is a *finding*, not a shared
+  assumption (an offline test proves schema violations fail cases).
+- **Citation integrity is enforced on every non-refused answer** regardless of case
+  type: each claim's chunk is independently fetched via `GET /chunks/{id}`, the quote
+  re-verified verbatim under canonical comparison, chunk membership checked against
+  the response's own `retrieved` list, shas compared, offsets validated. The harness
+  trusts nothing the target says about itself.
+- **Four probe axes**: correctness (8 cases, regex-pinned expected facts), refusal
+  (5 — off-corpus, near-corpus-unanswerable, adjacent-company confusion), filter
+  scope (3), paraphrase robustness (2 groups, both directions: stable answers *and*
+  stable refusals).
+
+**First full live run (2026-07-20): 18/18 cases passed; 23/23 independent citation
+checks ok; refusals held under paraphrase and under adjacent-company confusion
+(a Lockheed satellite question against a satellite-heavy corpus); median /ask
+latency 4.6s (max 50.8s — a decoy the model drafted at length before the gate
+stripped it).** The harness's own logic is covered by 23 offline tests (fake
+client, no network, no key).
