@@ -1,245 +1,224 @@
 # Grounded Filings Analyst
 
-A RAG system over SEC filings whose defining property is that it **never hallucinates**:
-every claim it makes is mechanically verified against a source span in a real filing —
-traceable down to exact character offsets and a file hash — and it **refuses** to answer
-what it cannot ground. Refusal is a first-class, machine-readable outcome, not an error.
+A question-answering system over SEC filings that never makes things up. Ask it about
+a company and it answers with a direct quote from the actual filing, plus a citation
+that points to the exact characters in the exact source file. If it cannot back an
+answer with evidence from the filings, it refuses. Refusing is the point, not a bug.
+
+The trick is that we do not trust the language model to stay grounded. It drafts an
+answer, and then our own code checks every quote against the source. Anything it cannot
+verify gets thrown away. If nothing survives, the answer becomes a refusal.
+
+For a full study of how the system works, read [docs/REPORT.md](docs/REPORT.md). For
+the engineering decision log and file map, read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## How it fits together
 
 ```
- SEC EDGAR ──fetch──▶ raw filings ──parse──▶ verified chunks ──index──▶ hybrid search
- (free APIs)         (byte-exact)          (exact offsets)            (BM25 + vectors)
-                                                                            │
-        HTTP API ◀──serve── verified answer ◀──verify── LLM draft ◀──retrieve┘
-        (harness            (claims + quotes         (claims must quote
-         contract)           + provenance)            chunks verbatim)
+ SEC EDGAR  ->  raw filings  ->  verified chunks  ->  hybrid search
+ (free)         (stored           (exact character     (keywords +
+                byte for byte)     offsets)             meaning)
+                                                            |
+   HTTP API  <-  verified answer  <-  quote check  <-  LLM drafts an
+   (for the      (quotes + full       (our code,        answer from the
+   evaluator)     provenance)          not the LLM)       retrieved chunks
 ```
 
-The pipeline is built so that **trust flows backward**: an answer cites a claim, the
-claim carries a verbatim quote, the quote is machine-checked against a chunk, the chunk
-carries exact character offsets into a raw filing stored byte-for-byte as the SEC served
-it, and the file's sha256 seals the chain. Independent verification of any answer needs
-nothing but the HTTP API.
+Trust runs backwards along that chain. An answer cites a claim, the claim carries a
+quote, the quote is checked against a chunk, the chunk knows its exact position in a
+raw file that is stored unchanged, and the file's fingerprint (a sha256 hash) seals the
+whole thing. To verify any answer yourself, all you need is the HTTP API.
 
-For design decisions, the complete file map, test rationale, and code flows, see
-**[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
+## What you need
 
----
-
-## Requirements
-
-| Requirement | Notes |
-|---|---|
-| Python ≥ 3.10 | developed on 3.10.5 |
-| [uv](https://docs.astral.sh/uv/) | dependency manager (`curl -LsSf https://astral.sh/uv/install.sh \| sh`) |
-| ~500 MB disk | embedding model (~80 MB), filings + index for 3 tickers (~30 MB), room to grow |
-| SEC User-Agent string | **required by the SEC** for all EDGAR requests — see setup |
-| Anthropic API key | **only for the answering layer**; fetch/parse/search run free and offline |
+- Python 3.10 or newer
+- [uv](https://docs.astral.sh/uv/) for dependency management
+- About 500 MB of disk for the embedding model, filings, and search index
+- A descriptive SEC User-Agent string (the SEC requires one on every request)
+- An Anthropic API key, but only for the answering step. Fetching, parsing, and search
+  all run free and offline.
 
 ## Setup
 
 ```bash
-git clone <this repo> && cd "SEC financials"
-uv sync                                   # creates .venv, installs everything
-cp .env.example .env                      # then edit .env:
+git clone https://github.com/tahseenmorshed/SEC-filings-chatbot.git
+cd SEC-filings-chatbot
+uv sync
+cp .env.example .env
 ```
 
-`.env` (gitignored — never commit it):
+Then edit `.env`:
 
 ```
-SEC_USER_AGENT="Your Name your.email@example.com"   # SEC rejects requests without it
-ANTHROPIC_API_KEY="sk-ant-..."                      # console.anthropic.com
+SEC_USER_AGENT="Your Name your.email@example.com"
+ANTHROPIC_API_KEY="sk-ant-..."
 ```
 
-Load it in each terminal session: `set -a; source .env; set +a`
+Load it in each terminal session with `set -a; source .env; set +a`.
 
-The app **fails loudly** if `SEC_USER_AGENT` is missing or looks like a placeholder —
-a malformed User-Agent is the #1 cause of silent SEC 403 blocks, so it is validated at
-startup, not discovered mid-crawl.
+If the User-Agent is missing or looks like a placeholder, the app stops at startup and
+tells you what to fix. A bad User-Agent is the most common reason the SEC silently
+blocks you, so it is checked up front rather than discovered halfway through a download.
 
-## Quickstart (fresh machine → first grounded answer)
+## Quick start
+
+From a fresh clone to a first grounded answer:
 
 ```bash
 set -a; source .env; set +a
 
-uv run python -m filings_analyst.edgar.resolver      # 1. ticker → CIK (1 SEC call)
-uv run python -m filings_analyst.edgar.filings       # 2. fetch pilot filings (NVDA ASTS RKLB)
-uv run python -m filings_analyst.parsing.pipeline    # 3. parse → verified chunks (offline)
-uv run python -m filings_analyst.retrieval.index     # 4. build search index (offline;
-                                                     #    downloads embed model once)
+uv run python -m filings_analyst.edgar.resolver      # 1. look up company IDs
+uv run python -m filings_analyst.edgar.filings       # 2. fetch the pilot filings
+uv run python -m filings_analyst.parsing.pipeline    # 3. parse into chunks
+uv run python -m filings_analyst.retrieval.index     # 4. build the search index
 uv run python -m filings_analyst.answering.answerer "How many people work at Rocket Lab?"
 ```
 
-Expected output of the last command: a direct answer, then each claim with its verbatim
-quote and citation (ticker, form, filing date, section, source file, character offsets).
+The last command prints the answer, then each claim with its quote and citation.
 
----
+## Using it
 
-## Components
-
-Each package is one pipeline stage with its own machine-checked guarantee:
-
-| Package | What it does | Its guarantee |
-|---|---|---|
-| `filings_analyst.edgar` | Fetches from SEC EDGAR: ticker→CIK resolution, latest 10-K/10-Q narrative documents, CompanyFacts XBRL | All traffic flows through one client enforcing SEC etiquette (User-Agent, ≤8 req/s throttle, disk cache, retry/backoff). Filings stored **byte-for-byte** with sha256 recorded |
-| `filings_analyst.parsing` | Turns raw inline-XBRL HTML into readable, section-labeled chunks | **Round-trip invariant, checked for 100% of chunks**: re-extracting `raw[char_start:char_end]` with the canonical extractor reproduces the chunk text exactly. Any failure aborts the build |
-| `filings_analyst.retrieval` | Hybrid search: hand-rolled BM25 + local embeddings, rank-fused | Deterministic ranking; verbatim chunk text on every result; the index fingerprints its source files and **refuses to load if they changed** |
-| `filings_analyst.answering` | LLM drafts claims-with-quotes; **our code verifies every quote** against the cited chunk | No unverified claim can reach a response — structurally. Everything-stripped → refusal with a reason code |
-| `filings_analyst.api` | FastAPI wrapper — the external evaluation contract | Serves the answering layer's schema *unmodified*; fails fast at startup on a stale index |
-
-## Models used
-
-| Model | Where | Why this one |
-|---|---|---|
-| **BM25 (Okapi)** — implemented in-repo, no library | `retrieval/bm25.py` | Exact-term matching (tickers, "Neutron", "10-K", numbers). The domain tokenizer keeps identifiers like `10-K`/`BB6` intact — the actual correctness risk, which is why it's custom |
-| **bge-small-en-v1.5** (384-dim, ONNX via fastembed) | `retrieval/encoders.py` | Semantic/paraphrase matching. Local, free, pinned, offline after a one-time ~80 MB download to `data/models/`. No API keys in the retrieval path |
-| **claude-opus-4-8** (Anthropic API) | `answering/answerer.py` | Drafts answers under structured outputs (schema-valid JSON by construction). Pinned in `config.py`; swappable. ~$0.05/question observed |
-
-The two retrieval signals are merged with reciprocal-rank fusion (K=5, chosen by a
-transparent parameter sweep against the committed gold set — see the architecture doc).
-
----
-
-## Using the product
-
-### Ask questions (CLI)
+### Ask a question
 
 ```bash
 uv run python -m filings_analyst.answering.answerer "Who manufactures NVIDIA's chips?"
 ```
 
-Anatomy of a response:
-- **the answer** — one short paragraph, built only from verified claims;
-- **claims** — each with the statement, the *verbatim quote* backing it, and the full
-  citation: `RKLB 10-K (2026-02-26), Business, rklb-20251231.htm chars 347071–351318`;
-- **refusals** — `REFUSED (retrieval_empty | model_refusal | all_claims_unverified)`.
-  Ask it "What is Apple's revenue?" and it should refuse: Apple isn't in the corpus,
-  and declining to guess is the product working.
+You get a short answer, then each claim with the quote that backs it and a full
+citation (company, form, filing date, section, source file, character range). If the
+filings cannot answer, you get `REFUSED` with a reason. Try "What is Apple's revenue?"
+to see a refusal: Apple is not in the corpus, so declining to guess is correct
+behavior. Each question costs roughly 5 cents and takes a few seconds.
 
-### Search without the LLM (free, instant)
+### Search without the model (free and instant)
 
 ```bash
 uv run python -m filings_analyst.retrieval.retriever "Neutron first launch" --k 5
-uv run python -m filings_analyst.retrieval.retriever "risk factors" --ticker ASTS --form 10-K
+uv run python -m filings_analyst.retrieval.retriever "risk factors" --ticker ASTS
 ```
 
-Each hit shows its rank under each signal (`bm25 #1, embed #3`) — the "why was this
-retrieved" diagnostics.
+Each result shows why it was found, with its rank under each search method.
 
-### Run the HTTP API
+### Run the API
 
 ```bash
-uv run python -m filings_analyst.api.serve          # http://127.0.0.1:8000
+uv run python -m filings_analyst.api.serve          # serves on http://127.0.0.1:8000
 ```
 
-| Endpoint | Purpose |
-|---|---|
-| `POST /ask` | `{"question": ..., "k"?}` → answer, verified claims with provenance, retrieved-chunk diagnostics, refusal flags |
-| `POST /search` | `{"query": ..., "k"?, "ticker"?, "form"?, "section"?, "method"?}` → raw hybrid retrieval with per-method diagnostics |
-| `GET /chunks/{id}` | One chunk record, verbatim — lets any external client independently re-verify a cited quote |
-| `GET /health` | Corpus size, tickers, pinned model ids |
+Four endpoints:
 
-Interactive OpenAPI docs at **`/docs`**. Example:
+- `POST /ask` takes `{"question": ...}` and returns the answer, verified claims with
+  provenance, the retrieved chunks, and refusal flags.
+- `POST /search` returns raw search results with per-method diagnostics.
+- `GET /chunks/{id}` returns one chunk exactly as stored, so any client can re-check a
+  quote itself.
+- `GET /health` reports the corpus size and the models in use.
+
+Interactive documentation is at `/docs` in your browser. Example:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/ask -H "content-type: application/json" \
   -d '{"question": "When did ASTS launch BlueWalker 3?"}'
 ```
 
----
+## Adding more filings
 
-## Getting more SEC filings
-
-The pipeline is ticker-generic. To add companies:
-
-1. **Fetch** (any ticker in the SEC's directory works; CIKs are resolved, never hardcoded):
-   ```bash
-   uv run python -m filings_analyst.edgar.filings LUNR GEV JOBY
-   ```
-   This pulls each company's **most recent 10-K and 10-Q** (exact form match — amendments
-   like 10-K/A are deliberately skipped) plus its CompanyFacts XBRL JSON, into
-   `data/store/<TICKER>/`. Re-running is free: every response is disk-cached, so nothing
-   is ever fetched twice. The default ticker set lives in `filings_analyst/config.py`
-   (`DEFAULT_TARGET_TICKERS`).
-
-2. **Parse** the new filings into verified chunks:
-   ```bash
-   uv run python -m filings_analyst.parsing.pipeline
-   ```
-
-3. **Rebuild the index** (mandatory after any parse — see below):
-   ```bash
-   uv run python -m filings_analyst.retrieval.index
-   ```
-
-SEC etiquette is enforced automatically and cannot be bypassed: descriptive User-Agent
-on every request, throttled to ≤8 req/s (SEC's ceiling is 10), disk caching, exponential
-backoff on transient errors. Getting these wrong normally causes silent IP blocks — here
-they're structural.
-
-## Parsing requirements & guarantees
-
-- **Input**: the primary 10-K/10-Q document as filed — modern **inline-XBRL XHTML** (the
-  format all three pilot filers use; the parser was validated against three structurally
-  diverse filers before generalizing).
-- **Never modify stored raw files.** Chunk offsets index into the decoded bytes of the
-  file exactly as fetched; the sha256 in each filing's metadata seals it. If a stored
-  file changes, parsing refuses to run on it (integrity gate) and a rebuilt index will
-  refuse to serve stale offsets.
-- **The round-trip invariant** is checked for every block and chunk at parse time:
-  re-extracting the chunk's raw span reproduces its text exactly. A parse that can't
-  guarantee its offsets fails loudly instead of writing silently-wrong citations.
-- Section labels (Item 1, 1A, 7...) are detected for 10-K and 10-Q structures; unknown
-  sections degrade to `"preamble"`/part labels — labels are metadata, never provenance.
-- Table cell text is extracted and preserved at the block level but **excluded from
-  chunks** — financial numbers-of-record travel on the XBRL CompanyFacts track instead.
-- Deterministic: re-running the pipeline produces byte-identical output.
-
-## Testing & quality gates
+The pipeline works for any US-listed ticker. To add companies, run three steps in
+order:
 
 ```bash
-uv run pytest                                       # 106 tests, fully offline, ~1s
-uv run python -m filings_analyst.retrieval.evaluate # gold-set retrieval scorecard
+uv run python -m filings_analyst.edgar.filings LUNR GEV JOBY   # 1. fetch
+uv run python -m filings_analyst.parsing.pipeline              # 2. parse to chunks
+uv run python -m filings_analyst.retrieval.index               # 3. rebuild the index
 ```
 
-- The offline suite needs **no network, no API key, no model download** — LLM and
-  embedding backends are injected fakes. It covers SEC-client throttling/caching,
-  the parser's round-trip invariant, section detection against decoys, BM25 against
-  hand-computed fixtures, fusion arithmetic, verification/refusal paths, and the API
-  contract.
-- Retrieval quality regresses against a committed gold set
-  ([eval/gold_set.jsonl](eval/gold_set.jsonl)) labeled by text-grep, never by running
-  the retriever. Current: fused recall@5 = 0.958, beating both single methods.
-- The answering layer's live check (8 gold questions, 3 off-corpus decoys): 8/8
-  answered, 25/25 claims independently re-verified against raw source bytes, 3/3
-  decoys refused.
+Step 1 pulls each company's most recent annual report (10-K) and quarterly report
+(10-Q), plus its financial data. Re-running it is free because every response is
+cached. Step 3 is required after any parse. If you skip it, the server refuses to start
+with a stale-index error, which is the safety check doing its job.
 
-## Data layout
+The default company list lives in `src/filings_analyst/config.py`.
+
+## The models
+
+- **BM25** is a keyword-ranking algorithm, written from scratch in the repo (about 100
+  lines). It handles exact terms like tickers, product names, and numbers. The custom
+  part is the tokenizer, which keeps identifiers like `10-K` and `BB6` in one piece.
+- **bge-small-en-v1.5** is a small embedding model that runs locally on the CPU. It
+  handles meaning-based matching, so "how many spacecraft" can find a chunk about
+  "satellites". It downloads once (about 80 MB) and then runs offline with no key.
+- **claude-opus-4-8** is the language model that drafts answers, through the Anthropic
+  API. It is pinned in the config and easy to swap.
+
+The two search models are free and local. Only the final answering step calls a paid
+API.
+
+## How the filings are parsed
+
+Filings arrive as inline XBRL, which is readable HTML with thousands of invisible
+accounting tags mixed in. The parser has one hard requirement: it must produce clean
+text while remembering exactly where every piece came from. Standard HTML libraries
+give you clean text but lose the positions, so we use Python's streaming parser, which
+reports each element's position, and do the assembly ourselves.
+
+The rules the parser follows:
+
+- Stored raw files are never modified. Chunk positions point into the file exactly as
+  the SEC served it, and the sha256 fingerprint seals it.
+- Every chunk is verified at build time. We slice the raw file at the chunk's recorded
+  positions, re-extract, and confirm we get the chunk's text back exactly. If any chunk
+  fails, the whole build stops. A citation system with wrong positions would be worse
+  than none.
+- Section labels (Item 1 Business, Item 1A Risk Factors, and so on) are detected but
+  treated as metadata, never as provenance. A wrong label cannot corrupt a citation.
+- Table cells are kept out of chunks. The real financial numbers come from the
+  structured data instead.
+- Output is deterministic. Parsing twice gives byte-identical files.
+
+## Running the tests
+
+```bash
+uv run pytest                                        # 106 tests, all offline, about 1 second
+uv run python -m filings_analyst.retrieval.evaluate  # retrieval quality scorecard
+```
+
+The whole test suite runs with no network and no API key. The language model, the
+embedder, and the network are all replaced by fakes, so the guarantees are checked on
+every run for free. Each test group targets a specific real failure: a bad User-Agent
+reaching the SEC, request bursts, storage corrupting a byte, offsets drifting during
+parsing, the tokenizer shredding an identifier, an unverified claim slipping into an
+answer, and so on. The full list with explanations is in
+[docs/REPORT.md](docs/REPORT.md).
+
+## Where files live on disk
 
 ```
 data/
-├── cache/    # every SEC response, keyed by URL hash — transport dedupe, safe to wipe
-├── store/    # the corpus: <TICKER>/narrative/<filing>/ (raw doc + metadata),
-│             #             <TICKER>/facts/companyfacts.json, <TICKER>/chunks/*.jsonl
-├── index/    # search index: records + embeddings + fingerprint manifest
-└── models/   # downloaded embedding model (one-time)
+  cache/   every SEC response, keyed by URL. Safe to delete; it just costs re-fetches.
+  store/   the corpus: raw documents, financial data, and chunks, organized by ticker.
+  index/   the search index: records, embeddings, and a fingerprint manifest.
+  models/  the downloaded embedding model.
 ```
 
-All of `data/` is regenerable and gitignored.
+Everything under `data/` is regenerable and is not committed to git.
 
-## Troubleshooting
+## Common problems
 
-| Symptom | Cause → fix |
-|---|---|
-| `SEC_USER_AGENT is not set...` | `.env` not loaded → `set -a; source .env; set +a` |
-| `Chunk file ... changed since the index was built` | You fetched/re-parsed → rebuild: `uv run python -m filings_analyst.retrieval.index` |
-| Authentication error on ask | `ANTHROPIC_API_KEY` not loaded or rotated |
-| Index build pegs CPU ~2 min | Normal — one-time embedding of all chunk windows |
-| HTTP 403s from SEC | User-Agent invalid, or IP temporarily blocked — wait, verify `.env` |
+- `SEC_USER_AGENT is not set`: you did not load `.env`. Run `set -a; source .env; set +a`.
+- `Chunk file ... changed since the index was built`: you fetched or re-parsed. Rebuild
+  the index with `uv run python -m filings_analyst.retrieval.index`.
+- Authentication error when asking: the Anthropic key is not loaded, or was rotated.
+- The index build uses the CPU heavily for a couple of minutes. That is normal. It is
+  the one-time cost of embedding every chunk.
 
-## Roadmap
+## Current status and roadmap
 
-Remaining after the core (all core stages are complete and verified): scale from the
-3-ticker pilot to all 8 target tickers; an XBRL facts track for precise numeric
-answers; the external evaluation harness (separate project, driven over this HTTP
-API); retrieval polish for one documented gold-set miss; CI. Details and current gaps:
+The core system is complete and verified end to end: fetch, parse, retrieve, answer,
+and serve, each with machine-checked guarantees. An external evaluation harness (a
+separate project) tests the running system over HTTP and passed 18 of 18 cases with all
+23 independent citation checks.
+
+Still to do: cover all 8 target tickers instead of the current 3, add a track for
+precise financial numbers from the structured XBRL data, close one documented search
+miss, and add continuous integration. Details and known gaps are in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
