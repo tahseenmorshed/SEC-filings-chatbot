@@ -9,8 +9,8 @@ The trick is that we do not trust the language model to stay grounded. It drafts
 answer, and then our own code checks every quote against the source. Anything it cannot
 verify gets thrown away. If nothing survives, the answer becomes a refusal.
 
-For a full study of how the system works, read [docs/REPORT.md](docs/REPORT.md). For
-the engineering decision log and file map, read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+For the engineering decision log, file map, code flows, and known gaps, read
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## How it fits together
 
@@ -207,8 +207,8 @@ embedder, and the network are all replaced by fakes, so the guarantees are check
 every run for free. Each test group targets a specific real failure: a bad User-Agent
 reaching the SEC, request bursts, storage corrupting a byte, offsets drifting during
 parsing, the tokenizer shredding an identifier, an unverified claim slipping into an
-answer, and so on. The full list with explanations is in
-[docs/REPORT.md](docs/REPORT.md).
+answer, and so on. Each test group is explained in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Where files live on disk
 
