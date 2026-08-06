@@ -229,7 +229,7 @@ so the API and the pipeline cannot drift apart. At startup the server checks tha
 the search index still matches the chunk files and refuses to boot if not. Serving
 stale offsets would silently break the provenance chain.
 
-## 8. The evaluation harness (separate repository)
+## 8. The evaluation harness (`eval-harness/`)
 
 **Job:** prove the system's claims from the outside, trusting nothing.
 
@@ -485,7 +485,7 @@ headings found in order, a known sentence lands in the right section's chunk.
 **Why:** synthetic fixtures cannot imitate real filer markup. This is the one test
 that touches real data, and it skips cleanly where the data is absent.
 
-### Harness tests (23, separate repository)
+### Harness tests (23, in `eval-harness/`)
 
 `test_checks.py` (15): the canonical text comparison folds unicode and whitespace;
 a verbatim claim passes with the chunk fetched independently; fabricated quotes,

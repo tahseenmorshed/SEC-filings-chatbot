@@ -1,0 +1,5 @@
+type: correctness
+id: c08_neutron_status
+question: "When is Neutron's first launch targeted?"
+expected_facts: ["Q4 2026"]
+notes: "MD&A: first launch now targeted for Q4 2026."

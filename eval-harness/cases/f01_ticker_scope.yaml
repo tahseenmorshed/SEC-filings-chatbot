@@ -1,0 +1,6 @@
+type: filter
+id: f01_ticker_scope
+query: "risk factors"
+expected_ticker: "ASTS"
+k: 10
+notes: "Ticker filter must be absolute - zero non-ASTS hits."

@@ -1,0 +1,5 @@
+type: correctness
+id: c01_rklb_headcount
+question: "How many people work at Rocket Lab?"
+expected_facts: ["2,?600"]
+notes: "Human Capital section: over 2,600 full-time permanent employees (Dec 31 2025)."

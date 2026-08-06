@@ -1,0 +1,5 @@
+type: correctness
+id: c06_electron_count
+question: "How many times has Electron launched?"
+expected_facts: ["75|81"]
+notes: "75 through Dec 31 2025 (10-K) or 81 through Mar 31 2026 (10-Q) - either is grounded."

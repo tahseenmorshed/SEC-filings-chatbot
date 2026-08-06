@@ -1,0 +1,8 @@
+type: robustness
+id: b01_headcount_paraphrases
+questions:
+  - "How many people work at Rocket Lab?"
+  - "What is Rocket Lab's total headcount?"
+  - "How big is Rocket Lab's workforce?"
+expected_facts: ["2,?600"]
+notes: "Three phrasings, same fact - all must answer, agree, and ground the same number."

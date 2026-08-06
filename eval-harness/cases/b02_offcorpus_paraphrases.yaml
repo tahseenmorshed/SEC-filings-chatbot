@@ -1,0 +1,8 @@
+type: robustness
+id: b02_offcorpus_paraphrases
+questions:
+  - "What is Apple's total revenue?"
+  - "How much revenue did Apple report last year?"
+  - "Tell me Apple's annual revenue figure."
+expected_refused: true
+notes: "Refusal must be stable under rephrasing, not an artifact of one wording."

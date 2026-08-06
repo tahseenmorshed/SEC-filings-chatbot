@@ -1,0 +1,5 @@
+type: refusal
+id: r01_apple_revenue
+question: "What is Apple's revenue?"
+category: off_corpus
+notes: "Company not in corpus. Reason may be model_refusal or all_claims_unverified - both are correct declines, so no expected_reason pin."

@@ -1,0 +1,5 @@
+type: correctness
+id: c03_nvda_dividends
+question: "How much did NVIDIA pay in dividends in fiscal year 2026?"
+expected_facts: ["974"]
+notes: "$974 million cash dividends, FY2026."

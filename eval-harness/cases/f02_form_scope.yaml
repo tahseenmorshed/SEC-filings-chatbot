@@ -1,0 +1,6 @@
+type: filter
+id: f02_form_scope
+query: "revenue"
+expected_form: "10-Q"
+k: 10
+notes: "Form filter must be absolute."

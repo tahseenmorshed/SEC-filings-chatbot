@@ -1,0 +1,5 @@
+type: refusal
+id: r05_nvda_stock_price
+question: "What was NVIDIA's stock price on March 3, 2026?"
+category: near_corpus_unanswerable
+notes: "In-corpus company, plausible-sounding, but filings do not state day-specific prices."

@@ -1,0 +1,7 @@
+type: filter
+id: f03_combined_scope
+query: "launch"
+expected_ticker: "RKLB"
+expected_section: "item_1a"
+k: 10
+notes: "Combined filters both enforced."

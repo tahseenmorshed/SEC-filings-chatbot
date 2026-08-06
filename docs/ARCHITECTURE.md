@@ -2,8 +2,7 @@
 
 > The README is the user manual. This document is the engineering record: what was
 > built, why each decision went the way it did, what every file does, what every test
-> guards, where the gaps are, and how a request flows through the system. It will be
-> extended after the external evaluation harness is built.
+> guards, where the gaps are, and how a request flows through the system.
 
 ---
 
@@ -23,8 +22,8 @@ engineering judgment around LLMs: measured guarantees over vibes, deterministic
 components wherever possible, right-sized tooling (no vector DB at 679 chunks, no
 framework where 15 lines of arithmetic suffice), and honest documentation of gaps.
 
-A separate, language-agnostic **evaluation harness** (not yet built) will test the
-system black-box over its HTTP API.
+A separate, language-agnostic **evaluation harness** (built; lives in `eval-harness/`
+as its own project) tests the system black-box over its HTTP API. See §9.
 
 ## 2. The provenance chain — the one guarantee, layer by layer
 
@@ -357,9 +356,10 @@ Honest list, in rough priority order:
 frameworks, rerankers (pending evidence), Docker, streaming responses, query-routing
 classifiers.
 
-## 9. Evaluation harness (built — separate repository)
+## 9. Evaluation harness (built — `eval-harness/`)
 
-The harness lives in its own repository (`sec-filings-eval-harness`) and drives this
+The harness lives in `eval-harness/` as a separate project with its own
+dependencies and virtual environment, and drives this
 system **black-box over HTTP, importing none of its code** (machine-checked: zero
 `filings_analyst` references). Key design points:
 

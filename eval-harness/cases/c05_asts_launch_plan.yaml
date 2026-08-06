@@ -1,0 +1,5 @@
+type: correctness
+id: c05_asts_launch_plan
+question: "How many Block 2 satellites does AST SpaceMobile plan to launch and by when?"
+expected_facts: ["45", "2026"]
+notes: "45-60 Block 2 BB satellites by end of 2026 (10-K); ~45 in latest 10-Q."

@@ -1,0 +1,5 @@
+type: correctness
+id: c04_asts_bw3_date
+question: "When did AST SpaceMobile launch BlueWalker 3?"
+expected_facts: ["September 10, 2022"]
+notes: "BW3 test satellite launch date."

@@ -175,6 +175,26 @@ The rules the parser follows:
   structured data instead.
 - Output is deterministic. Parsing twice gives byte-identical files.
 
+## The evaluation harness
+
+The `eval-harness/` directory holds a separate project that tests this system from the
+outside. It talks only HTTP and imports none of the analyst's code, so it cannot inherit
+its blind spots. It runs 18 test cases covering correct answers, refusals, search
+filters, and stability across rephrasings, and it independently re-verifies every quote
+in every answer by fetching the cited chunk itself.
+
+It has its own dependencies and its own virtual environment. To run it, start the API in
+one terminal and then:
+
+```bash
+cd eval-harness
+uv sync
+uv run pytest                                                              # its own tests, offline
+uv run python -m harness.runner --base-url http://127.0.0.1:8000           # full live run
+```
+
+See [eval-harness/README.md](eval-harness/README.md) for details.
+
 ## Running the tests
 
 ```bash

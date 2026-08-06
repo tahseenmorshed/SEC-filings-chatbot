@@ -1,0 +1,5 @@
+type: refusal
+id: r03_tesla_deliveries
+question: "How many vehicles did Tesla deliver in 2025?"
+category: off_corpus
+notes: "Historically triggered a draft that the verification gate stripped."

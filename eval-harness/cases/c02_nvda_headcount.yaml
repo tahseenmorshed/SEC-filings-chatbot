@@ -1,0 +1,5 @@
+type: correctness
+id: c02_nvda_headcount
+question: "How many employees does NVIDIA have?"
+expected_facts: ["42,?000"]
+notes: "~42,000 employees in 38 countries, end of FY2026."

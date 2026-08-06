@@ -1,0 +1,5 @@
+type: refusal
+id: r04_lockheed_satellites
+question: "How many satellites does Lockheed Martin plan to launch next year?"
+category: adjacent_company_confusion
+notes: "Satellite-heavy corpus (ASTS) + off-corpus company: retrieval will surface ASTS chunks; answering about the wrong company would be a serious grounding failure."

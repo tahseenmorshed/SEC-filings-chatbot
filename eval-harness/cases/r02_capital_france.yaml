@@ -1,0 +1,5 @@
+type: refusal
+id: r02_capital_france
+question: "What is the capital of France?"
+category: off_corpus
+notes: "Non-financial world knowledge the model certainly has - must still refuse."

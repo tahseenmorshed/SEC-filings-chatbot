@@ -1,0 +1,5 @@
+type: correctness
+id: c07_nvda_manufacturing
+question: "Who manufactures NVIDIA's chips?"
+expected_facts: ["TSMC|fabless|foundr"]
+notes: "Fabless model; TSMC and Samsung as foundries."
