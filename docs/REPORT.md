@@ -302,7 +302,7 @@ swap.
 Plus `eval/gold_set.jsonl` (retrieval gold set), `tests/` (106 tests), and
 `data/` (gitignored: cache, store, index, models).
 
-**Harness repository:** `harness/wire_schema.py` (independent response shapes),
+**Harness (`eval-harness/`):** `harness/wire_schema.py` (independent response shapes),
 `harness/client.py` (plain HTTP), `harness/cases.py` (YAML loader),
 `harness/checks.py` (all check logic as pure functions), `harness/runner.py`
 (execution and reporting), `cases/` (18 YAML cases), `tests/` (23 tests).
