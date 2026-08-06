@@ -21,3 +21,7 @@ data/models/
 
 # macOS junk
 .DS_Store
+
+# Personal study material, not for the public repo
+docs/REPORT.md
+docs/INTERVIEW-PREP.md
